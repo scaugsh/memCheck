@@ -24,9 +24,11 @@
 #define MAX_MAP_ITEMS 512
 #define MAX_FRAMES 64
 
-static std::map<std::pair<void *, std::string>, CallStackInfo> add2lineCache;
-void clearAdd2lineCache() {
+static thread_local std::map<std::pair<void *, std::string>, CallStackInfo> add2lineCache;
+static thread_local std::map<void *, std::pair<int, Dl_info>> dladdrCache;
+void clearCallStackCache() {
     add2lineCache.clear();
+    dladdrCache.clear();
 }
 typedef struct _map_item_t 
 {
@@ -47,7 +49,9 @@ static int print_stderr(const char* fmt, ...)
 
 static char m_addr2line_path[MAX_FILE_PATH] = "addr2line";
 static callstack_output_func m_print = print_stderr;
-
+char exe_path[1024];
+map_item_t items[MAX_MAP_ITEMS];
+int items_count;
 
 static void read_maps(map_item_t *items, int *items_count /* in and out */, int pid)
 {
@@ -107,11 +111,24 @@ static void read_maps(map_item_t *items, int *items_count /* in and out */, int 
     fclose(fp);
 }
 
+void initCallStack() {
+    if (readlink("/proc/self/exe", exe_path, sizeof(exe_path)) < 0)
+    {
+        // m_print("readlink FAILED! %s\n", strerror(errno));
+        exe_path[0] ='\0';
+    }
+    items_count = MAX_MAP_ITEMS;
 
-static int match_file(const map_item_t *items, int items_count, void *addr)
+    read_maps(items, &items_count, -1);
+}
+
+static int match_file(const map_item_t *items, int items_count, void *addr, int beginIndex = 0)
 {
     int i;
-    for (i = 0; i < items_count; i++)
+    if (beginIndex == -1) {
+        beginIndex = 0;
+    }
+    for (i = beginIndex; i < items_count; i++)
     {
         if ((uint64_t)addr >= items[i].start && (uint64_t)addr < items[i].end)
         {
@@ -191,26 +208,32 @@ static int read_by_addr2line(void *addr, const char *path, CallStackInfo *stackI
     return 0;
 }
 
+static int fast_dladdr(void *addr, Dl_info *info) {
+    if (info != NULL) {
+        auto it = dladdrCache.find(info);
+        if (it != dladdrCache.end()) {
+            *info = it->second.second;
+            return it->second.first;
+        }
+    }
+    int res = dladdr(addr, info);
+    if (info != NULL) {
+        dladdrCache[addr] = std::make_pair(res, *info);
+    }
+    return res;
+}
 std::vector<CallStackInfo> callstack_dump(int max_frames)
 {
-    char exe_path[1024] = { 0 };
     void *samples[MAX_FRAMES];
-    map_item_t items[MAX_MAP_ITEMS];
-    int items_count;
+
     int frames;
     int i;
 
     char *addr;
     char *addr_conv;
-    int index;
+    int index = 0;
     Dl_info info;
     std::vector<CallStackInfo> stackInfos;
-
-    if (readlink("/proc/self/exe", exe_path, sizeof(exe_path)) < 0)
-    {
-        // m_print("readlink FAILED! %s\n", strerror(errno));
-        exe_path[0] ='\0';
-    }
 
     // items = (map_item_t *)malloc(sizeof(map_item_t) * MAX_MAP_ITEMS);
     // if (items == NULL)
@@ -218,9 +241,6 @@ std::vector<CallStackInfo> callstack_dump(int max_frames)
     //     m_print("malloc map items FAILED!\n");
     //     return stackInfos;
     // }
-    items_count = MAX_MAP_ITEMS;
-
-    read_maps(items, &items_count, -1);
     
     frames = backtrace(samples, (max_frames > 0 && max_frames > MAX_FRAMES) ? max_frames : MAX_FRAMES);
     
@@ -232,6 +252,7 @@ std::vector<CallStackInfo> callstack_dump(int max_frames)
         addr_conv = addr;
 
         index = match_file(items, items_count, addr);
+        // printf("index %d items_count %d\n", index, items_count);
         if (index >= 0)
         {
             //addr2line use the converted address
@@ -246,7 +267,7 @@ std::vector<CallStackInfo> callstack_dump(int max_frames)
         }
 
         //dladdr use the original address
-        if (dladdr(addr, &info) != 0)
+        if (fast_dladdr(addr, &info) != 0)
         {
             stackInfo.funcName = info.dli_sname;
             stackInfo.moduleName = info.dli_fname;

@@ -9,7 +9,7 @@ std::vector<std::string> MemCheckHelper::m_searchFiles;
 
 void MemCheckHelper::newCallBack(const void* ptr, size_t size) {
     assert(m_pointer2stackInfo.count((void *)ptr) == 0);
-    auto stackInfos = callstack_dump();
+    auto stackInfos = callstack_dump(8);
     if (stackInfos.empty()) {
         return ;
     }
@@ -65,6 +65,7 @@ void MemCheckHelper::reset() {
 }
 
 void MemCheckHelper::init() {
+    initCallStack();
     MallocHookHelper::setNewHook(&MemCheckHelper::newCallBack);
     MallocHookHelper::setDeleteHook(&MemCheckHelper::deleteCallBack);
 }
@@ -76,7 +77,7 @@ void MemCheckHelper::openMemoryCheck() {
 void MemCheckHelper::closeMemoryCheck() {
     MallocHookHelper::destroyHook();
     MemCheckHelper::reset();
-    clearAdd2lineCache();
+    clearCallStackCache();
 }
 
 std::string MemCheckHelper::dumpMemoryInfo(uint32_t limit) {

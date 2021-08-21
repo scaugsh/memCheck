@@ -36,7 +36,8 @@ struct CallStackInfo {
 
 std::vector<CallStackInfo> callstack_dump(int max_frames = INT32_MAX);
 
-void clearAdd2lineCache();
+void clearCallStackCache();
+void initCallStack();
 
 typedef int (*callstack_output_func)(const char *format, ...);
 
