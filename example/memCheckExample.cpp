@@ -12,7 +12,7 @@ int main() {
     MemCheckHelper::openMemoryCheck();
 
     uint32_t *a = new uint32_t;
-    test(88);
+    test(8888);
     auto ptr = malloc(100);
     delete a;
 

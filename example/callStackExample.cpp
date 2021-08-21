@@ -8,6 +8,7 @@ void test(int i) {
     }
 }
 int main() {
+    initCallStack();
     test(0);
     return 0;
 }
