@@ -13,6 +13,10 @@ void MemCheckHelper::newCallBack(const void* ptr, size_t size) {
     if (stackInfos.empty()) {
         return ;
     }
+    // std::cout << "dump stackInfos" << std::endl;
+    // for (auto &info: stackInfos) {
+    //     std::cout << info.dump() << std::endl;
+    // }
     PointerInfo pointInfo;
     if (!m_searchFiles.empty()) {
         for (auto &stackInfo: stackInfos) {
@@ -72,6 +76,7 @@ void MemCheckHelper::openMemoryCheck() {
 void MemCheckHelper::closeMemoryCheck() {
     MallocHookHelper::destroyHook();
     MemCheckHelper::reset();
+    clearAdd2lineCache();
 }
 
 std::string MemCheckHelper::dumpMemoryInfo(uint32_t limit) {

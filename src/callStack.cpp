@@ -16,14 +16,18 @@
 
 #include <execinfo.h>
 #include <dlfcn.h>
-
+#include <map>
+#include <string>
 #include "callStack.h"
 
 #define MAX_FILE_PATH 1024
 #define MAX_MAP_ITEMS 512
 #define MAX_FRAMES 64
 
-
+static std::map<std::pair<void *, std::string>, CallStackInfo> add2lineCache;
+void clearAdd2lineCache() {
+    add2lineCache.clear();
+}
 typedef struct _map_item_t 
 {
     uint64_t start;
@@ -123,6 +127,13 @@ static int match_file(const map_item_t *items, int items_count, void *addr)
 
 static int read_by_addr2line(void *addr, const char *path, CallStackInfo *stackInfo = nullptr)
 {
+    auto it = add2lineCache.find(std::make_pair(addr, std::string(path)));
+    if (it != add2lineCache.end()) {
+        if (stackInfo) {
+            *stackInfo = it->second;
+        }
+        return 0;
+    }
 	char buf[512];
 	char buf_func[512];
     int line = -1;
@@ -130,6 +141,8 @@ static int read_by_addr2line(void *addr, const char *path, CallStackInfo *stackI
 	char *p;
 
 	snprintf(buf, sizeof(buf), "%s -C -e %s -f -i %p", m_addr2line_path, path, addr);
+
+    // puts(buf);
 
 	fp = popen (buf, "r");
 	if (fp == NULL)
@@ -171,6 +184,7 @@ static int read_by_addr2line(void *addr, const char *path, CallStackInfo *stackI
         stackInfo->moduleName = path;
         stackInfo->funcName = buf_func;
         stackInfo->line = (sscanf (p, "%d", &line) == 1 ? line - 1: 0);
+        add2lineCache[std::make_pair(addr, std::string(path))] = *stackInfo;
     }
 
 	pclose(fp);
@@ -181,7 +195,7 @@ std::vector<CallStackInfo> callstack_dump(int max_frames)
 {
     char exe_path[1024] = { 0 };
     void *samples[MAX_FRAMES];
-    map_item_t *items;
+    map_item_t items[MAX_MAP_ITEMS];
     int items_count;
     int frames;
     int i;
@@ -198,12 +212,12 @@ std::vector<CallStackInfo> callstack_dump(int max_frames)
         exe_path[0] ='\0';
     }
 
-    items = (map_item_t *)malloc(sizeof(map_item_t) * MAX_MAP_ITEMS);
-    if (items == NULL)
-    {
-        m_print("malloc map items FAILED!\n");
-        return stackInfos;
-    }
+    // items = (map_item_t *)malloc(sizeof(map_item_t) * MAX_MAP_ITEMS);
+    // if (items == NULL)
+    // {
+    //     m_print("malloc map items FAILED!\n");
+    //     return stackInfos;
+    // }
     items_count = MAX_MAP_ITEMS;
 
     read_maps(items, &items_count, -1);
@@ -246,7 +260,7 @@ OK:
         stackInfos.emplace_back(stackInfo);
     }
 
-    free(items);
+    // free(items);
     return stackInfos;
 }
 

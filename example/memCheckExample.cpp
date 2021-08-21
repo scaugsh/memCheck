@@ -7,12 +7,12 @@ void test(uint32_t cnt) {
     }
 }
 int main() {
-    MemCheckHelper::setSearchFile({"memCheck"});
+    MemCheckHelper::setSearchFile({"memCheck/example/"});
     MemCheckHelper::init();
     MemCheckHelper::openMemoryCheck();
 
     uint32_t *a = new uint32_t;
-    test(8);
+    test(88);
     auto ptr = malloc(100);
     delete a;
 
